@@ -96,7 +96,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Encontra os vizinhos em comum entre todos os pares de vértices
+    // Encontra os vizinhos em comum entre todos os pares de vértices, sem repetir
     for (int i = 0; i < total_vertices; i++) {
         for (int j = i + 1; j < total_vertices; j++) {
             int comuns = vizinhos_comuns(i, j);
