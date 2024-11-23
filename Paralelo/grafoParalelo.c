@@ -135,6 +135,14 @@ int main(int argc, char **argv) {
             matriz_adj_local[arestas[i].v * num_vertices + arestas[i].u] = 1;
         }
 
+        char nome_arquivo_temp[32];
+        snprintf(nome_arquivo_temp, sizeof(nome_arquivo_temp), "saida_local_temp_%d.txt", rank);
+        FILE *arquivo_saida_local = fopen(nome_arquivo_temp, "w");
+        if (arquivo_saida_local == NULL) {
+            perror("Falha ao abrir o arquivo de saída local");
+            MPI_Abort(MPI_COMM_WORLD, 1);
+        }
+
         for (int u = inicio; u < fim; u++) {
             for (int v = u + 1; v < num_vertices; v++) {
                 int vizinhos_comuns = 0;
@@ -144,11 +152,12 @@ int main(int argc, char **argv) {
                     }
                 }
                 if (vizinhos_comuns > 0) {
-                    printf("%d %d %d\n", u, v, vizinhos_comuns);
+                    fprintf(arquivo_saida_local, "%d %d %d\n", u, v, vizinhos_comuns);
                 }
             }
         }
 
+        fclose(arquivo_saida_local);
         free(matriz_adj_local);
 
         double tempo_fim = MPI_Wtime();
@@ -165,20 +174,21 @@ int main(int argc, char **argv) {
             MPI_Abort(MPI_COMM_WORLD, 1);
         }
 
+        // Lê os arquivos temporários de saída de cada processo e escreve no arquivo final
         for (int i = 0; i < num_procs; i++) {
-            if (i == rank) {
-                FILE *arquivo_temp = fopen("saida_local_temp.txt", "r");
-                if (arquivo_temp == NULL) {
-                    perror("Falha ao abrir o arquivo temporário");
-                    continue;
-                }
-                char linha[256];
-                while (fgets(linha, sizeof(linha), arquivo_temp)) {
-                    fprintf(arquivo_saida, "%s", linha);
-                }
-                fclose(arquivo_temp);
-                remove(nome_arquivo_temp);
+            char nome_arquivo_temp[32];
+            snprintf(nome_arquivo_temp, sizeof(nome_arquivo_temp), "saida_local_temp_%d.txt", i);
+            FILE *arquivo_temp = fopen(nome_arquivo_temp, "r");
+            if (arquivo_temp == NULL) {
+                perror("Falha ao abrir o arquivo temporário");
+                continue;
             }
+            char linha[256];
+            while (fgets(linha, sizeof(linha), arquivo_temp)) {
+                fprintf(arquivo_saida, "%s", linha);
+            }
+            fclose(arquivo_temp);
+            remove(nome_arquivo_temp);
         }
 
         fclose(arquivo_saida);
