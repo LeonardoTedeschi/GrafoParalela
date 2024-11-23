@@ -80,9 +80,9 @@ int main(int argc, char **argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    if (argc != 2) {
+    if (argc < 2 || argc > 3) {
         if (rank == 0) {
-            fprintf(stderr, "Uso: %s <entrada.edgelist>\n", argv[0]);
+            fprintf(stderr, "Uso: %s <entrada.edgelist> [num_procs]\n", argv[0]);
         }
         MPI_Finalize();
         return EXIT_FAILURE;
@@ -92,10 +92,22 @@ int main(int argc, char **argv) {
     char nome_arquivo_saida[256];
     snprintf(nome_arquivo_saida, sizeof(nome_arquivo_saida), "%.*s.cng", (int)(strrchr(nome_arquivo_entrada, '.') - nome_arquivo_entrada), nome_arquivo_entrada);
 
+    int num_procs = size;
+    if (argc == 3) {
+        num_procs = atoi(argv[2]);
+        if (num_procs > size || num_procs < 1) {
+            if (rank == 0) {
+                fprintf(stderr, "Número de processos inválido. Deve estar entre 1 e %d.\n", size);
+            }
+            MPI_Finalize();
+            return EXIT_FAILURE;
+        }
+    }
+
     Aresta *arestas = NULL;
     int num_arestas, num_vertices;
 
-    double tempo_inicio = MPI_Wtime();
+    double tempo_inicio_total = MPI_Wtime();
 
     if (rank == 0) {
         ler_lista_arestas(nome_arquivo_entrada, &arestas, &num_arestas, &num_vertices);
@@ -110,65 +122,82 @@ int main(int argc, char **argv) {
 
     MPI_Bcast(arestas, num_arestas * sizeof(Aresta), MPI_BYTE, 0, MPI_COMM_WORLD);
 
-    int inicio = (rank * num_vertices) / size;
-    int fim = ((rank + 1) * num_vertices) / size;
+    if (rank < num_procs) {
+        double tempo_inicio = MPI_Wtime();
 
-    int *matriz_adj_local = (int *)calloc(num_vertices * num_vertices, sizeof(int));
-    for (int i = 0; i < num_arestas; i++) {
-        matriz_adj_local[arestas[i].u * num_vertices + arestas[i].v] = 1;
-        matriz_adj_local[arestas[i].v * num_vertices + arestas[i].u] = 1;
+        int vertices_por_processo = num_vertices / num_procs;
+        int inicio = rank * vertices_por_processo;
+        int fim = (rank == num_procs - 1) ? num_vertices : (rank + 1) * vertices_por_processo;
+
+        int *matriz_adj_local = (int *)calloc(num_vertices * num_vertices, sizeof(int));
+        for (int i = 0; i < num_arestas; i++) {
+            matriz_adj_local[arestas[i].u * num_vertices + arestas[i].v] = 1;
+            matriz_adj_local[arestas[i].v * num_vertices + arestas[i].u] = 1;
+        }
+
+        for (int u = inicio; u < fim; u++) {
+            for (int v = u + 1; v < num_vertices; v++) {
+                int vizinhos_comuns = 0;
+                for (int w = 0; w < num_vertices; w++) {
+                    if (matriz_adj_local[u * num_vertices + w] && matriz_adj_local[v * num_vertices + w]) {
+                        vizinhos_comuns++;
+                    }
+                }
+                if (vizinhos_comuns > 0) {
+                    printf("%d %d %d\n", u, v, vizinhos_comuns);
+                }
+            }
+        }
+
+        free(matriz_adj_local);
+
+        double tempo_fim = MPI_Wtime();
+        double tempo_execucao = tempo_fim - tempo_inicio;
+        printf("Processo %d - Tempo de execução: %f segundos\n", rank, tempo_execucao);
     }
 
-    FILE *arquivo_saida = NULL;
+    MPI_Barrier(MPI_COMM_WORLD);
+
     if (rank == 0) {
-        arquivo_saida = fopen(nome_arquivo_saida, "w");
+        FILE *arquivo_saida = fopen(nome_arquivo_saida, "w");
         if (arquivo_saida == NULL) {
             perror("Falha ao abrir o arquivo de saída");
             MPI_Abort(MPI_COMM_WORLD, 1);
         }
-    }
 
-    for (int u = inicio; u < fim; u++) {
-        for (int v = u + 1; v < num_vertices; v++) {
-            int vizinhos_comuns = 0;
-            for (int w = 0; w < num_vertices; w++) {
-                if (matriz_adj_local[u * num_vertices + w] && matriz_adj_local[v * num_vertices + w]) {
-                    vizinhos_comuns++;
+        for (int i = 0; i < num_procs; i++) {
+            if (i == rank) {
+                FILE *arquivo_temp = fopen("saida_local_temp.txt", "r");
+                if (arquivo_temp == NULL) {
+                    perror("Falha ao abrir o arquivo temporário");
+                    continue;
                 }
-            }
-            if (vizinhos_comuns > 0) {
-                if (rank == 0) {
-                    fprintf(arquivo_saida, "%d %d %d\n", u, v, vizinhos_comuns);
-                } else {
-                    int dados[3] = {u, v, vizinhos_comuns};
-                    MPI_Send(dados, 3, MPI_INT, 0, 0, MPI_COMM_WORLD);
+                char linha[256];
+                while (fgets(linha, sizeof(linha), arquivo_temp)) {
+                    fprintf(arquivo_saida, "%s", linha);
                 }
+                fclose(arquivo_temp);
+                remove(nome_arquivo_temp);
             }
         }
-    }
 
-    if (rank == 0) {
-        for (int i = 1; i < size; i++) {
-            MPI_Status status;
-            while (true) {
-                int flag;
-                MPI_Iprobe(i, 0, MPI_COMM_WORLD, &flag, &status);
-                if (!flag) break;
-
-                int dados[3];
-                MPI_Recv(dados, 3, MPI_INT, i, 0, MPI_COMM_WORLD, &status);
-                fprintf(arquivo_saida, "%d %d %d\n", dados[0], dados[1], dados[2]);
-            }
-        }
         fclose(arquivo_saida);
     }
 
     free(arestas);
-    free(matriz_adj_local);
 
-    double tempo_fim = MPI_Wtime();
+    double tempo_fim_total = MPI_Wtime();
     if (rank == 0) {
-        printf("Tempo de execução: %f segundos\n", tempo_fim - tempo_inicio);
+        double tempo_total = tempo_fim_total - tempo_inicio_total;
+        printf("Tempo total de execução: %f segundos\n", tempo_total);
+        // Salva os dados de desempenho em um arquivo para gerar gráficos posteriormente
+        FILE *arquivo_tempo = fopen("tempos_execucao.txt", "a");
+        if (arquivo_tempo != NULL) {
+            fprintf(arquivo_tempo, "%d %f\n", num_procs, tempo_total);
+            fclose(arquivo_tempo);
+        } else {
+            perror("Falha ao abrir o arquivo de tempos de execução");
+        }
     }
 
     MPI_Finalize();
