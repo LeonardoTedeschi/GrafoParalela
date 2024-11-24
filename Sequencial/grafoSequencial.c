@@ -118,7 +118,15 @@ int main(int argc, char *argv[]) {
     // Calcula o tempo de execução
     clock_t tempo_fim = clock();
     double tempo_total = ((double)(tempo_fim - tempo_inicio)) / CLOCKS_PER_SEC;
-    printf("Tempo necessário: %.2f segundos\n", tempo_total);
+    printf("Tempo de execucao (sequencial): %.2f segundos\n", tempo_total);
+
+    FILE *file = fopen("tempos_execucao_sequencial.csv", "a");
+    if (file == NULL) {
+        perror("Erro ao abrir arquivo");
+        exit(EXIT_FAILURE);
+    }
+    fprintf(file, "%d,%f\n", 1, tempo_total);  // Aqui o número de processos é 1 (sequencial) e o tempo de execução
+    fclose(file);
 
     return 0;
 }
