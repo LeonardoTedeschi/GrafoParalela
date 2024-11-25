@@ -2,8 +2,11 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define NUM_VERTICES 10
+#define NUM_VERTICES 10000 
 #define MIN_EDGES_PER_VERTEX 1
+
+
+
 
 // Estrutura para armazenar arestas
 typedef struct {

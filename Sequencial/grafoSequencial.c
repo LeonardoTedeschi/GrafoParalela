@@ -120,5 +120,17 @@ int main(int argc, char *argv[]) {
     double tempo_total = ((double)(tempo_fim - tempo_inicio)) / CLOCKS_PER_SEC;
     printf("Tempo necessário: %.2f segundos\n", tempo_total);
 
+    // Grava os dados no arquivo CSV
+    FILE *arquivo_csv = fopen("tempos_execucao_sequencial.csv", "a");
+    if (arquivo_csv == NULL) {
+        perror("Erro ao abrir o arquivo CSV");
+        return 1;
+    }
+
+    // Grava o número de vértices e o tempo total de execução
+    fprintf(arquivo_csv, "1,%d,%f\n", total_vertices, tempo_total);
+
+    fclose(arquivo_csv);
+
     return 0;
 }

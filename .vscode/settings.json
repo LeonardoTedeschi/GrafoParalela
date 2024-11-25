@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "grafoparalelo": "cpp"
+        "grafoparalelo": "cpp",
+        "time.h": "c"
     }
 }

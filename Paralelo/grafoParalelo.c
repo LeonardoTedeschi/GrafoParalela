@@ -201,13 +201,15 @@ int main(int argc, char **argv) {
         double tempo_total = tempo_fim_total - tempo_inicio_total;
         printf("Tempo total de execução: %f segundos\n", tempo_total);
         // Salva os dados de desempenho em um arquivo para gerar gráficos posteriormente
-        FILE *arquivo_tempo = fopen("tempos_execucao.txt", "a");
-        if (arquivo_tempo != NULL) {
-            fprintf(arquivo_tempo, "%d %f\n", num_procs, tempo_total);
-            fclose(arquivo_tempo);
-        } else {
-            perror("Falha ao abrir o arquivo de tempos de execução");
+       FILE *arquivo_csv = fopen("tempos_execucao.csv", "a");
+        if (arquivo_csv == NULL) {
+            perror("Erro ao abrir o arquivo CSV");
+            MPI_Abort(MPI_COMM_WORLD, 1);
         }
+
+        // Grava os dados no arquivo CSV
+        fprintf(arquivo_csv, "%d,%d,%f\n", num_procs, num_vertices, tempo_total);
+        fclose(arquivo_csv);
     }
 
     MPI_Finalize();
